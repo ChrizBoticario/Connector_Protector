@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "ConnectProtect",
+  "version": "1.0",
+  "description": "Intercepts clicks to prevent accidental navigation and manages blocked links.",
+  "permissions": [
+    "storage",
+    "contextMenus",
+    "activeTab",
+    "scripting"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Manage Blocked Links"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["styles.css"]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
