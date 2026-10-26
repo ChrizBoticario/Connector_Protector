@@ -1,0 +1,110 @@
+document.addEventListener('DOMContentLoaded', () => {
+    let currentListType = '';
+    const urlInput = document.getElementById('urlInput');
+
+    // --- INITIALIZE DYNAMIC STATS & STATE ---
+    // 1. Fetch persistent Blocklist count
+    chrome.storage.local.get(['blocklist'], (result) => {
+        const blockedCount = result.blocklist ? result.blocklist.length : 0;
+        document.getElementById('blockCount').innerText = blockedCount;
+    });
+
+    // 2. Fetch Session-based Scan count and last pasted URL
+    chrome.storage.session.get(['scanCount', 'lastUrl'], (result) => {
+        const scans = result.scanCount || 0;
+        document.getElementById('scanCount').innerText = scans;
+        
+        if (result.lastUrl) {
+            urlInput.value = result.lastUrl;
+        }
+    });
+
+    // Save URL to session storage dynamically as user types/pastes
+    urlInput.addEventListener('input', () => {
+        chrome.storage.session.set({ lastUrl: urlInput.value.trim() });
+    });
+
+    // --- MANUAL SCAN MODULE ---
+    document.getElementById('scanBtn').addEventListener('click', () => {
+        let testUrl = urlInput.value.trim();
+        
+        if (!testUrl) {
+            alert("Please enter a URL to scan.");
+            return;
+        }
+
+        // Increment Session Scan Counter
+        chrome.storage.session.get(['scanCount'], (result) => {
+            const newCount = (result.scanCount || 0) + 1;
+            chrome.storage.session.set({ scanCount: newCount });
+            document.getElementById('scanCount').innerText = newCount;
+        });
+
+        const resultDiv = document.getElementById('scanResult');
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = "<i>Analyzing with Edge-AI...</i>";
+
+        // Simulated Inference (Static Analysis)
+        setTimeout(() => {
+            const len = testUrl.length;
+            const dots = (testUrl.match(/\./g) || []).length;
+            const score = (len * 0.01) + (dots * 0.15) * 10; 
+            const prob = Math.min(Math.round(score * 10), 99);
+
+            let narrative = `<strong>Risk Score: ${prob}%</strong><br>`;
+            if (prob > 50) {
+                narrative += `<span style="color:#dc3545;">XAI: Anomalous structure detected. High probability of malicious intent.</span>`;
+            } else {
+                narrative += `<span style="color:#28a745;">XAI: URL structure appears standard. Low risk.</span>`;
+            }
+            resultDiv.innerHTML = narrative;
+        }, 400); 
+    });
+
+    // --- LIST MANAGEMENT MODALS ---
+    const listModal = document.getElementById('listModal');
+    const confirmModal = document.getElementById('confirmModal');
+    
+    document.getElementById('viewWhitelistBtn').addEventListener('click', () => openListModal('whitelist'));
+    document.getElementById('viewBlocklistBtn').addEventListener('click', () => openListModal('blocklist'));
+    document.getElementById('closeModalBtn').addEventListener('click', () => listModal.classList.remove('active'));
+
+    function openListModal(type) {
+        currentListType = type;
+        document.getElementById('modalTitle').innerText = type === 'whitelist' ? 'Whitelisted URLs' : 'Blocklisted URLs';
+        const listUl = document.getElementById('urlList');
+        listUl.innerHTML = ''; 
+
+        chrome.storage.local.get([type], (result) => {
+            const items = result[type] || [];
+            if(items.length === 0) listUl.innerHTML = '<li><i>List is empty.</i></li>';
+            
+            items.forEach(url => {
+                const li = document.createElement('li');
+                li.innerText = url;
+                listUl.appendChild(li);
+            });
+            listModal.classList.add('active');
+        });
+    }
+
+    // --- REMOVE ALL LOGIC ---
+    document.getElementById('removeAllBtn').addEventListener('click', () => {
+        confirmModal.classList.add('active');
+    });
+    document.getElementById('confirmCancelBtn').addEventListener('click', () => {
+        confirmModal.classList.remove('active');
+    });
+    document.getElementById('confirmYesBtn').addEventListener('click', () => {
+        const update = {};
+        update[currentListType] = []; 
+        chrome.storage.local.set(update, () => {
+            // Also reset block count display if we cleared the blocklist
+            if (currentListType === 'blocklist') {
+                document.getElementById('blockCount').innerText = 0;
+            }
+            confirmModal.classList.remove('active');
+            openListModal(currentListType); 
+        });
+    });
+});

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ConnectProtect</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="header">
+        <div class="logo-shield">🛡️</div>
+        <h2>ConnectProtect</h2>
+        <span class="badge">Edge-AI Active</span>
+    </div>
+    
+    <div class="stats-container">
+        <div class="stat-box">
+            <span class="stat-number" id="scanCount">0</span>
+            <span class="stat-label">Scanned Session</span>
+        </div>
+        <div class="stat-box danger">
+            <span class="stat-number" id="blockCount">0</span>
+            <span class="stat-label">Total Blocked</span>
+        </div>
+    </div>
+
+    <!-- CONTROLS AREA -->
+    <div class="controls">
+        <input type="text" id="urlInput" placeholder="Paste URL here to test...">
+        <button id="scanBtn" class="primary-btn">Scan URL</button>
+        <button id="viewWhitelistBtn" class="secondary-btn">View Whitelist</button>
+        <button id="viewBlocklistBtn" class="secondary-btn">View Blocklist</button>
+    </div>
+
+    <!-- MANUAL SCAN RESULT DISPLAY -->
+    <div id="scanResult" style="display: none;"></div>
+
+    <!-- LIST MODAL (Hidden by default) -->
+    <div id="listModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="modalTitle">List</h3>
+            <ul id="urlList"></ul>
+            <div class="modal-actions">
+                <button id="removeAllBtn" class="danger-btn">Remove All</button>
+                <button id="closeModalBtn" class="secondary-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONFIRMATION MODAL -->
+    <div id="confirmModal" class="modal-overlay confirm-overlay">
+        <div class="modal-content">
+            <p>Are you sure you want to remove all listed URLs?</p>
+            <div class="modal-actions">
+                <button id="confirmYesBtn" class="danger-btn">Yes</button>
+                <button id="confirmCancelBtn" class="secondary-btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

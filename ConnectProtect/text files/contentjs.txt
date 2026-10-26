@@ -1,0 +1,219 @@
+// --- CONFIG & DATASETS ---
+const GLOBAL_WHITELIST = [
+    "google.com", "facebook.com", "youtube.com", "netflix.com",
+    "microsoft.com", "apple.com", "linkedin.com", "instagram.com",
+    "twitter.com", "wikipedia.org", "github.com", "canvas.instructure.com",
+    "zoom.us"
+];
+
+const TARGETS = ['paypal.com', 'facebook.com', 'bdo.com.ph', 'gcash.com'];
+
+// --- LAYER 1: NORMALIZATION & DEBOUNCE ---
+let lastClickTime = 0;
+document.addEventListener('click', (e) => {
+    const link = e.target.closest('a');
+    if (!link) return;
+
+    const now = Date.now();
+    if (now - lastClickTime < 500) return; 
+    lastClickTime = now;
+
+    if (link.href.startsWith('http')) {
+        e.preventDefault(); 
+        processURL(link.href);
+    }
+});
+
+function normalizeURL(url) {
+    try {
+        let clean = url.replace(/^(https?:\/\/)?(www\.)?/, '').split(/[?#]/)[0];
+        return clean.toLowerCase().replace(/\/$/, "");
+    } catch (e) { return url; }
+}
+
+// --- LAYER 2: DETERMINISTIC FILTERING (D1) ---
+async function processURL(rawUrl) {
+    const timerId = "DetectionLatency_" + Date.now();
+    console.time(timerId);
+    
+    const startTime = performance.now();
+    const normalized = normalizeURL(rawUrl);
+
+    chrome.storage.session.get(['scanCount'], (res) => {
+        chrome.storage.session.set({ scanCount: (res.scanCount || 0) + 1 });
+    });
+
+    chrome.storage.local.get(['whitelist', 'blocklist'], (result) => {
+        const userWhitelist = result.whitelist || [];
+        const blocklist = result.blocklist || [];
+
+        if (GLOBAL_WHITELIST.some(domain => normalized.includes(domain))) {
+            window.location.href = rawUrl; 
+            console.timeEnd(timerId);
+            return;
+        }
+
+        if (userWhitelist.some(domain => normalized.includes(domain))) {
+            window.location.href = rawUrl; 
+            console.timeEnd(timerId);
+            return;
+        }
+
+        if (blocklist.some(domain => normalized.includes(domain))) {
+            showNotification(`🚨 ${normalized} is on your Blocklist.`);
+            console.timeEnd(timerId);
+            return;
+        }
+
+        runInference(rawUrl, normalized, startTime, timerId);
+    });
+}
+
+function runInference(rawUrl, normalized, startTime, timerId) {
+    const len = normalized.length;
+    const dots = (normalized.match(/\./g) || []).length;
+    const entropy = [...new Set(normalized)].reduce((acc, char) => {
+        const p = (normalized.split(char).length - 1) / len;
+        return acc - p * Math.log2(p);
+    }, 0);
+    
+    const minDistance = Math.min(...TARGETS.map(t => levenshtein(normalized, t)));
+    const score = (len * 0.01) + (dots * 0.15) + (entropy * 0.1) + (1 / (minDistance + 1) * 0.6);
+    const probability = Math.min(Math.round(score * 100), 99);
+
+    const endTime = performance.now();
+    const latency = (endTime - startTime).toFixed(2);
+    console.timeEnd(timerId);
+
+    showXAINarrative(rawUrl, normalized, probability, latency);
+}
+
+function levenshtein(s, t) {
+    if (!s.length) return t.length; if (!t.length) return s.length;
+    const arr = [];
+    for (let i = 0; i <= t.length; i++) { arr[i] = [i]; }
+    for (let j = 0; j <= s.length; j++) { arr[0][j] = j; }
+    for (let i = 1; i <= t.length; i++) {
+        for (let j = 1; j <= s.length; j++) {
+            arr[i][j] = t[i - 1] === s[j - 1] ? arr[i - 1][j - 1] : Math.min(arr[i - 1][j - 1] + 1, arr[i][j - 1] + 1, arr[i - 1][j] + 1);
+        }
+    }
+    return arr[t.length][s.length];
+}
+
+function showNotification(msg) {
+    const banner = document.createElement('div');
+    banner.innerText = msg;
+    banner.style.cssText = `
+        position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+        background: #333; color: white; padding: 12px 24px; border-radius: 8px;
+        z-index: 2147483647; font-family: sans-serif; font-size: 14px;
+        box-shadow: 0 10px 20px rgba(0,0,0,0.3); opacity: 0; transition: opacity 0.3s;
+    `;
+    document.body.appendChild(banner);
+    setTimeout(() => banner.style.opacity = '1', 10);
+    setTimeout(() => {
+        banner.style.opacity = '0';
+        setTimeout(() => banner.remove(), 300);
+    }, 3000);
+}
+
+function addToList(type, url) {
+    chrome.storage.local.get([type], (result) => {
+        let list = result[type] || [];
+        if (!list.includes(url)) {
+            list.unshift(url); 
+            let update = {};
+            update[type] = list;
+            chrome.storage.local.set(update, () => {
+                showNotification(`Added to ${type.charAt(0).toUpperCase() + type.slice(1)}`);
+            });
+        }
+    });
+}
+
+// --- LAYER 4: REDESIGNED XAI UI ---
+function showXAINarrative(rawUrl, normalizedUrl, prob, delay) {
+    if (document.getElementById('cp-speedbump-overlay')) return; 
+
+    let riskLevel = prob > 70 ? "HIGH RISK DETECTED" : (prob > 40 ? "MODERATE RISK" : "LOW RISK");
+    let headerColor = prob > 70 ? "#dc3545" : (prob > 40 ? "#fd7e14" : "#28a745");
+    let reason = prob > 70 ? 
+        "XAI Insight: High visual similarity to a protected brand. AI Analysis suggests an anomalous entropy pattern." : 
+        (prob > 40 ? "XAI Insight: The URL structure shows minor anomalies. Proceed with caution." : "The URL structure appears standard.");
+
+    const overlay = document.createElement('div');
+    overlay.id = 'cp-speedbump-overlay';
+    
+    overlay.innerHTML = `
+        <style>
+            #cp-speedbump-overlay {
+                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px);
+                z-index: 2147483647; display: flex; justify-content: center; align-items: center;
+                font-family: 'Segoe UI', sans-serif; animation: cpFadeIn 0.3s;
+            }
+            @keyframes cpFadeIn { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes cpDropIn { from { transform: translateY(-30px) scale(0.95); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+            
+            #cp-modal {
+                background: #ffffff; width: 500px; border-radius: 16px;
+                box-shadow: 0 20px 50px rgba(0,0,0,0.5); overflow: hidden;
+                animation: cpDropIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            }
+            .cp-header { background: ${headerColor}; color: white; padding: 18px 20px; font-size: 18px; font-weight: bold; }
+            .cp-body { padding: 25px; color: #333; }
+            .cp-url-box { background: #f8f9fa; padding: 12px; border-radius: 8px; border: 1px solid #dee2e6; margin-bottom: 15px; word-break: break-all; font-family: monospace; }
+            .cp-xai-box { background: #e9ecef; border-left: 4px solid #007bff; padding: 15px; font-size: 14px; margin-bottom: 15px; border-radius: 0 8px 8px 0; }
+            
+            .cp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+            .cp-btn { padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: all 0.2s; font-size: 13px; color: white; }
+            .cp-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+            
+            .btn-primary { background: #007bff; }
+            .btn-secondary { background: #6c757d; }
+            .btn-green { background: #28a745; } 
+            .btn-orange { background: #ff8c00; } 
+            .btn-outline { background: white; color: #333; border: 1px solid #ccc; }
+            .btn-danger { background: #dc3545; }
+        </style>
+
+        <div id="cp-modal">
+            <div class="cp-header">🛡️ ConnectProtect: ${riskLevel}</div>
+            <div class="cp-body">
+                <p style="margin-top:0; font-weight:bold;">Destination URL:</p>
+                <div class="cp-url-box">${rawUrl}</div>
+                <div class="cp-xai-box"><strong>AI Narrative:</strong><br>${reason}</div>
+                
+                <div style="font-size: 11px; color: #6c757d; display: flex; justify-content: space-between;">
+                    <span>Probability Score: ${prob}%</span>
+                    <span>Edge-AI Latency: ${delay}ms</span>
+                </div>
+
+                <div class="cp-grid">
+                    <button class="cp-btn btn-primary" id="btn-open-here">Open here</button>
+                    <button class="cp-btn btn-orange" id="btn-open-tab">Open in new tab</button>
+                    <button class="cp-btn btn-secondary" id="btn-whitelist">Add to whitelist</button>
+                    <button class="cp-btn btn-danger" id="btn-blocklist">Add to blocklist</button>
+                    <button class="cp-btn btn-outline" id="btn-cancel">Cancel</button>
+                    <button class="cp-btn btn-green" id="btn-proceed">Proceed</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    overlay.onclick = (e) => {
+        if (e.target.id === 'cp-speedbump-overlay') {
+            overlay.remove();
+        }
+    };
+    
+    document.getElementById('btn-open-here').onclick = () => { window.location.href = rawUrl; };
+    document.getElementById('btn-open-tab').onclick = () => { window.open(rawUrl, '_blank'); overlay.remove(); };
+    document.getElementById('btn-whitelist').onclick = () => { addToList('whitelist', normalizedUrl); overlay.remove(); };
+    document.getElementById('btn-blocklist').onclick = () => { addToList('blocklist', normalizedUrl); overlay.remove(); };
+    document.getElementById('btn-cancel').onclick = () => overlay.remove();
+    document.getElementById('btn-proceed').onclick = () => { window.location.href = rawUrl; };
+}

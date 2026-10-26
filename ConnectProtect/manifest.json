@@ -1,26 +1,43 @@
 {
   "manifest_version": 3,
   "name": "ConnectProtect",
-  "version": "1.0",
-  "description": "Intercepts clicks to prevent accidental navigation and manages blocked links.",
+  "version": "2.2",
+  "description": "Hybrid malicious URL detection with local Edge-AI scoring, XAI trace, and Cognitive Speed Bump technology.",
   "permissions": [
     "storage",
-    "contextMenus",
-    "activeTab",
-    "scripting"
+    "tabs",
+    "contextMenus"
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Manage Blocked Links"
+    "default_title": "ConnectProtect — Malicious URL Shield"
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "css": ["styles.css"]
+      "matches": [
+        "<all_urls>"
+      ],
+      "css": [
+        "inject.css"
+      ],
+      "js": [
+        "engine.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
     }
   ],
   "background": {
     "service_worker": "background.js"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "Tech_bg.avif"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
 }

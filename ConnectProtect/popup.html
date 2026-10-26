@@ -1,70 +1,84 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>ConnectProtect</title>
-    <style>
-        body { width: 320px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 15px; }
-        h2 { margin-top: 0; color: #2c3e50; display: flex; align-items: center; gap: 10px; }
-        
-        /* Container for the input */
-        .input-container { margin-bottom: 15px; }
-        input[type="text"] {
-            width: 100%;
-            padding: 10px;
-            box-sizing: border-box;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-
-        /* Action Buttons (Save/Cancel) hidden by default */
-        .action-btns {
-            display: none; /* Hidden initially */
-            margin-top: 5px;
-            justify-content: flex-end;
-            gap: 5px;
-        }
-        
-        button { cursor: pointer; padding: 8px 12px; border: none; border-radius: 4px; }
-        .btn-save { background: #27ae60; color: white; }
-        .btn-cancel { background: #e74c3c; color: white; }
-        .btn-remove { background: #e74c3c; color: white; padding: 2px 8px; font-size: 12px; margin-left: auto;}
-
-        /* List Styles */
-        ul { list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto; border-top: 1px solid #eee;}
-        li { 
-            padding: 10px; 
-            border-bottom: 1px solid #eee; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            font-size: 13px;
-        }
-        li:hover { background-color: #f9f9f9; }
-        
-        .empty-msg { text-align: center; color: #888; font-style: italic; margin-top: 20px;}
-    </style>
+    <meta charset="UTF-8">
+    <title>ConnectProtect — Phishing Shield</title>
+    <link rel="stylesheet" href="popup.css">
 </head>
 <body>
+    <!-- HEADER -->
+    <div class="header">
+        <div class="logo-shield">🛡️</div>
+        <h2>ConnectProtect</h2>
+        <span class="badge">Edge-AI Active</span>
+    </div>
 
-    <h2>
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="#2c3e50">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-        </svg>
-        ConnectProtect
-    </h2>
-
-    <div class="input-container">
-        <input type="text" id="urlInput" placeholder="Add a link to block...">
-        <div class="action-btns" id="actionBtns">
-            <button class="btn-cancel" id="cancelBtn">Cancel</button>
-            <button class="btn-save" id="saveBtn">Save</button>
+    <!-- STATS -->
+    <div class="stats-container">
+        <div class="stat-box blue">
+            <span class="stat-number" id="scanCount">0</span>
+            <span class="stat-label">Scanned</span>
+        </div>
+        <div class="stat-box green">
+            <span class="stat-number" id="whiteCount">0</span>
+            <span class="stat-label">Whitelisted</span>
+        </div>
+        <div class="stat-box danger">
+            <span class="stat-number" id="blockCount">0</span>
+            <span class="stat-label">Blocked</span>
         </div>
     </div>
 
-    <h3>Blocked Links</h3>
-    <ul id="linkList"></ul>
-    <div id="emptyMsg" class="empty-msg">No blocked links yet.</div>
+    <!-- SCAN CONTROLS -->
+    <div class="controls">
+        <input type="text" id="urlInput" placeholder="Paste a URL to scan…" autocomplete="off" spellcheck="false">
+        <button id="scanBtn" class="primary-btn">🔍 Scan URL</button>
 
+        <!-- Post-scan quick-add buttons -->
+        <div class="btn-row scan-action-row" id="scanActionRow" style="display:none;">
+            <button id="whitelistScannedBtn" class="success-btn scan-action-btn">
+                <span>✅ Whitelist<br>Scanned URL</span>
+            </button>
+            <button id="blocklistScannedBtn" class="danger-btn scan-action-btn">
+                <span>🚫 Blocklist<br>Scanned URL</span>
+            </button>
+        </div>
+
+        <div class="btn-row">
+            <button id="viewWhitelistBtn" class="success-btn">Whitelist</button>
+            <button id="viewBlocklistBtn" class="danger-btn">Blocklist</button>
+        </div>
+    </div>
+
+    <!-- SCAN RESULT -->
+    <div id="scanResult" style="display:none;"></div>
+
+    <!-- LIST MODAL -->
+    <div id="listModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="modalTitle">List</h3>
+            <ul id="urlList"></ul>
+            <div class="modal-actions">
+                <button id="removeAllBtn" class="danger-btn">Remove All</button>
+                <button id="removeSelectedBtn" class="danger-btn-outline" style="display: none;">Remove</button>
+                <button id="closeModalBtn" class="secondary-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONFIRM MODAL -->
+    <div id="confirmModal" class="modal-overlay confirm-overlay">
+        <div class="modal-content">
+            <p>Are you sure you want to remove all entries from this list?</p>
+            <div class="modal-actions">
+                <button id="confirmYesBtn" class="danger-btn">Yes, Remove All</button>
+                <button id="confirmCancelBtn" class="secondary-btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts: engine MUST load before popup.js -->
+    <script src="engine.js"></script>
     <script src="popup.js"></script>
 </body>
 </html>

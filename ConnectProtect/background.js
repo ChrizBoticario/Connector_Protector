@@ -1,73 +1,74 @@
-/**
- * ALGORITHM 1: CANONICAL URI NORMALIZATION
- * Purpose: Transforms various URL formats into a single "Canonical" form.
- * This ensures that if you block "http://www.google.com/?test=1", 
- * the extension also blocks "https://google.com".
- */
-function normalizeUrl(url) {
-    if (!url || !url.startsWith('http')) return url;
+// =============================================================================
+// ConnectProtect — Background Service Worker (background.js)
+// Handles right-click context menu creation, event interception, and storage updates.
+// =============================================================================
+
+// Event: chrome.runtime.onInstalled
+// - Triggers when the extension is first installed or updated.
+// - Creates two context menu options: Whitelist and Block.
+// - Sets menu targets to webpage background and hyperlinks.
+chrome.runtime.onInstalled.addListener(() => {
+    chrome.contextMenus.create({
+        id: "cp-whitelist",
+        title: "Whitelist this URL",
+        contexts: ["page", "link"]
+    });
     
-    // Step 1: Remove protocol (http/https)
-    let normalized = url.replace(/^(https?:\/\/)/, '');
+    chrome.contextMenus.create({
+        id: "cp-block",
+        title: "Block this URL",
+        contexts: ["page", "link"]
+    });
+});
+
+// Event: chrome.contextMenus.onClicked
+// - Triggers when a user selects a ConnectProtect option from the right-click menu.
+// - Retrieves the target URL from the clicked link or page.
+// - Validates and parses the URL to extract the hostname.
+// - Calls addToList to store the hostname in either the whitelist or blocklist.
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+    const targetUrl = info.linkUrl || info.pageUrl;
+    if (!targetUrl) return;
     
-    // Step 2: Remove 'www.' or 'm.' (mobile) prefixes
-    normalized = normalized.replace(/^(www\.|m\.)/, '');
-    
-    // Step 3: Remove Query Parameters and Hashes (everything after ? or #)
-    normalized = normalized.split(/[?#]/)[0];
-    
-    // Step 4: Remove Trailing Slash
-    if (normalized.endsWith('/')) {
-        normalized = normalized.slice(0, -1);
+    try {
+        const urlObj = new URL(targetUrl);
+        const hostname = urlObj.hostname;
+        
+        if (info.menuItemId === "cp-whitelist") {
+            addToList("whitelist", hostname, tab.id);
+        } else if (info.menuItemId === "cp-block") {
+            addToList("blocklist", hostname, tab.id);
+        }
+    } catch (e) {
+        console.error("Invalid URL clicked", e);
     }
-    
-    return normalized.toLowerCase();
-}
+});
 
-// Helper to save URLs to Chrome's local storage
-function addUrlToStorage(url) {
-    const normalizedUrl = normalizeUrl(url); 
-    if (!normalizedUrl) return; 
-
-    chrome.storage.local.get({ blockedLinks: [] }, (data) => {
-        const links = data.blockedLinks;
-        if (!links.includes(normalizedUrl)) {
-            links.push(normalizedUrl);
-            chrome.storage.local.set({ blockedLinks: links });
+// Function: addToList
+// - Inputs: listName (string), hostname (string), tabId (integer).
+// - Retrieves the current array for listName (whitelist/blocklist) from local storage.
+// - Checks if the domain name is already registered in the retrieved list.
+// - Appends the new hostname to the array if it does not already exist.
+// - Commits the updated list back to chrome.storage.local.
+// - Formats a success emoji message depending on which list was modified.
+// - Dispatches a "showToast" message to the current active webpage tab.
+function addToList(listName, hostname, tabId) {
+    chrome.storage.local.get([listName], (result) => {
+        let list = result[listName] || [];
+        if (!list.includes(hostname)) {
+            list.push(hostname);
+            const update = {};
+            update[listName] = list;
+            chrome.storage.local.set(update, () => {
+                console.log(`Added ${hostname} to ${listName}`);
+                if (tabId) {
+                    const msg = listName === 'whitelist' ? `✅ Added to Whitelist: ${hostname}` : `🚫 Blocked: ${hostname}`;
+                    chrome.tabs.sendMessage(tabId, {
+                        action: "showToast",
+                        message: msg
+                    }).catch(() => {});
+                }
+            });
         }
     });
 }
-
-// Create the Context Menu (Right-Click Menu)
-chrome.runtime.onInstalled.addListener(() => {
-    chrome.contextMenus.create({
-        id: "cp-open-new",
-        title: "ConnectProtect: Open in New Window",
-        contexts: ["link"]
-    });
-
-    chrome.contextMenus.create({
-        id: "cp-block",
-        title: "ConnectProtect: Block this Link",
-        contexts: ["link"]
-    });
-});
-
-// Handle Context Menu Clicks
-chrome.contextMenus.onClicked.addListener((info) => {
-    if (info.menuItemId === "cp-open-new") {
-        chrome.windows.create({ url: info.linkUrl });
-    } 
-    else if (info.menuItemId === "cp-block") {
-        addUrlToStorage(info.linkUrl);
-    }
-});
-
-// Listen for messages from the popup or content script
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === "blockLink" || request.action === "blockLinkFromPopup") {
-        addUrlToStorage(request.url);
-        sendResponse({ status: "success" });
-    }
-    return true; 
-});
